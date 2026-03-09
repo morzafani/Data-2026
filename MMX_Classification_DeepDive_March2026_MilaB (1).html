@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MMX Classification Deep Dive - Similarweb</title>
+<style>
+:root{--navy:#1A2737;--dark:#0F1923;--blue:#4F8DF9;--orange:#FF9600;--white:#FFFFFF;--gray:#94A3B8;--text:#CBD5E1;--card:#1E3044;--border:#2A4060;--green:#34D399}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;background:var(--navy);color:var(--white);min-height:100vh;line-height:1.7}
+.ui{font-family:Arial,Helvetica,sans-serif}
+.container{max-width:740px;margin:0 auto;padding:0 24px}
+
+/* Progress */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;background:var(--dark);z-index:100}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--orange));transition:width .6s}
+
+/* Header */
+.header{background:var(--dark);border-bottom:1px solid var(--border);padding:14px 0;position:sticky;top:0;z-index:90}
+.header-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+
+/* Search */
+.search-wrap{margin-bottom:20px;position:relative}
+.search-input{width:100%;padding:12px 16px 12px 40px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--white);font-size:14px;font-family:Arial,sans-serif;outline:none;transition:border .2s}
+.search-input:focus{border-color:var(--blue)}
+.search-input::placeholder{color:var(--gray)}
+.search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:16px}
+.search-results{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-top:4px;max-height:300px;overflow-y:auto;display:none}
+.search-results.show{display:block}
+.sr-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .2s}
+.sr-item:hover{background:var(--dark)}
+.sr-item:last-child{border-bottom:none}
+.sr-ch{font-size:10px;color:var(--orange);font-weight:700;letter-spacing:1px}
+.sr-title{font-size:13px;color:var(--white);font-weight:600;margin-top:2px}
+.sr-match{font-size:12px;color:var(--gray);margin-top:4px}
+
+/* Chapter nav */
+.ch-nav{display:flex;gap:6px;margin-bottom:24px;overflow-x:auto;padding-bottom:4px}
+.ch-btn{padding:10px 14px;background:transparent;border:1px solid var(--border);border-radius:8px;cursor:pointer;flex-shrink:0;min-width:100px;text-align:left;transition:all .2s;color:var(--white)}
+.ch-btn.active{background:var(--card);border-color:var(--blue)}
+.ch-btn .icon{font-size:18px;margin-bottom:2px}
+.ch-btn .label{font-size:10px;color:var(--gray);font-weight:700;letter-spacing:1px}
+.ch-btn.active .label{color:var(--orange)}
+.ch-btn .name{font-size:11px;color:var(--gray);margin-top:2px;line-height:1.3}
+.ch-btn.active .name{color:var(--white)}
+.ch-progress{margin-top:6px;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.ch-progress-fill{height:100%;background:var(--orange);transition:width .5s}
+.ref-btn{padding:10px 14px;background:transparent;border:1px solid var(--orange);border-radius:8px;cursor:pointer;flex-shrink:0;min-width:60px;text-align:center;transition:all .2s;color:var(--orange)}
+.ref-btn.active{background:rgba(255,150,0,.15);border-color:var(--orange)}
+.ref-btn .icon{font-size:18px;margin-bottom:2px}
+.ref-btn .label{font-size:10px;font-weight:700;letter-spacing:1px}
+.ref-btn .name{font-size:11px;margin-top:2px;line-height:1.3}
+
+/* Page */
+.ch-intro .label{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--orange);margin-bottom:6px}
+.ch-intro .title{font-size:24px;font-weight:800;margin-bottom:8px;line-height:1.3}
+.ch-intro .desc{font-size:14px;color:var(--gray);font-style:italic;margin-bottom:20px}
+.dots{display:flex;gap:6px;margin-bottom:20px}
+.dot{height:6px;flex:1;border-radius:3px;border:none;cursor:pointer;transition:all .3s;opacity:.6}
+.dot.active{opacity:1}
+.page-card{background:var(--card);border-radius:12px;padding:28px;border:1px solid var(--border);margin-bottom:20px;min-height:200px}
+.page-title{font-size:18px;font-weight:800;margin-bottom:4px;line-height:1.3}
+.page-title .q{color:var(--orange)}
+.badge{font-size:10px;font-weight:700;background:var(--orange);color:var(--navy);padding:3px 8px;border-radius:4px;margin-left:8px;white-space:nowrap;vertical-align:middle}
+.page-meta{font-size:11px;color:var(--gray);margin-bottom:16px}
+
+/* Prose & content */
+.prose{font-size:15px;color:var(--text);line-height:1.8;margin-bottom:14px}
+.prose strong{color:var(--white);font-weight:700}
+.prose em{color:var(--orange);font-style:italic}
+.callout{display:flex;gap:14px;padding:14px 16px;background:var(--dark);border-radius:10px;border-left:3px solid var(--orange);margin-bottom:10px}
+.callout .c-icon{font-size:20px;flex-shrink:0;line-height:1.4}
+.callout .c-title{font-size:13px;font-weight:700;color:var(--orange);margin-bottom:3px;font-family:Arial,sans-serif}
+.callout .c-text{font-size:13px;color:var(--text);line-height:1.7}
+.callout.blue{border-left-color:var(--blue)}
+.callout.blue .c-title{color:var(--blue)}
+
+/* Takeaway box */
+.takeaway{background:rgba(79,141,249,.1);border:1px solid var(--blue);border-radius:10px;padding:16px 18px;margin:20px 0 14px}
+.takeaway .t-label{font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--blue);margin-bottom:8px;font-family:Arial,sans-serif}
+.takeaway .t-item{font-size:13px;color:var(--text);padding:4px 0 4px 16px;position:relative;line-height:1.6}
+.takeaway .t-item::before{content:"→";position:absolute;left:0;color:var(--blue)}
+
+/* Client Q format */
+.client-block{background:var(--dark);border-radius:10px;padding:16px 18px;margin-bottom:12px}
+.client-says{font-size:13px;color:var(--orange);font-weight:700;font-family:Arial,sans-serif;margin-bottom:6px}
+.you-say{font-size:14px;color:var(--text);line-height:1.7;font-style:italic;padding-left:14px;border-left:2px solid var(--blue)}
+
+/* Before/After */
+.ba-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
+.ba-col .ba-header{font-size:11px;font-weight:700;letter-spacing:1.5px;margin-bottom:8px;padding:6px 12px;border-radius:4px;text-align:center;font-family:Arial,sans-serif}
+.ba-col.before .ba-header{background:var(--dark);color:var(--gray)}
+.ba-col.after .ba-header{background:var(--blue);color:var(--white)}
+.ba-item{font-size:13px;padding:6px 10px;border-bottom:1px solid var(--border);line-height:1.4}
+.ba-col.before .ba-item{color:var(--gray)}
+.ba-col.after .ba-item{color:var(--white);font-weight:500}
+
+/* URL example */
+.url-ex{background:var(--dark);border-radius:8px;padding:14px 16px;margin-bottom:10px;border-left:3px solid var(--blue)}
+.url-ex .ue-label{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:6px;font-family:Arial,sans-serif}
+.url-ex .ue-url{font-size:11px;font-family:monospace;color:var(--text);word-break:break-all;line-height:1.6}
+.url-ex .highlight{background:rgba(255,150,0,.3);padding:1px 3px;border-radius:2px;color:var(--orange);font-weight:700}
+.url-ex .ue-result{font-size:13px;color:var(--orange);font-weight:700;margin-top:6px;font-family:Arial,sans-serif}
+
+/* Scenario */
+.scenario{background:var(--dark);border-radius:10px;padding:12px 16px;margin-bottom:8px;cursor:pointer;border:1px solid var(--border);transition:all .3s}
+.scenario.open{border-color:var(--blue)}
+.s-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.s-label{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:3px;font-family:Arial,sans-serif}
+.s-signals{font-size:12px;color:var(--gray);font-family:monospace;line-height:1.5}
+.s-result{font-size:12px;font-weight:700;color:var(--orange);background:rgba(255,150,0,.1);padding:3px 10px;border-radius:12px;white-space:nowrap;flex-shrink:0;font-family:Arial,sans-serif}
+.s-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.7;display:none}
+.scenario.open .s-detail{display:block}
+
+/* Glossary */
+.glossary{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:20px;overflow:hidden}
+.glossary-toggle{padding:14px 18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-family:Arial,sans-serif;font-size:14px;font-weight:600;color:var(--blue)}
+.glossary-toggle .arrow{transition:transform .3s;color:var(--gray)}
+.glossary-toggle.open .arrow{transform:rotate(180deg)}
+.glossary-body{display:none;padding:0 18px 16px}
+.glossary-body.show{display:block}
+.g-item{padding:8px 0;border-bottom:1px solid var(--border)}
+.g-item:last-child{border-bottom:none}
+.g-term{font-size:13px;font-weight:700;color:var(--orange);font-family:Arial,sans-serif}
+.g-def{font-size:13px;color:var(--text);margin-top:2px}
+
+/* Quick ref */
+.qr-card{background:var(--dark);border-radius:10px;padding:14px 16px;margin-bottom:10px;border-left:3px solid var(--blue)}
+.qr-channel{font-size:14px;font-weight:700;color:var(--white);margin-bottom:4px;font-family:Arial,sans-serif}
+.qr-signals{font-size:12px;color:var(--text);line-height:1.6}
+.qr-new{background:var(--orange);color:var(--navy);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;margin-left:6px;vertical-align:middle}
+
+/* Nav */
+.nav-row{display:flex;justify-content:space-between;align-items:center;padding-bottom:60px;margin-top:20px}
+.nav-btn{padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;font-family:Arial,sans-serif}
+.nav-prev{background:transparent;border:1px solid var(--border);color:var(--gray)}
+.nav-next{background:var(--blue);border:none;color:var(--white)}
+.nav-end{padding:12px 20px;background:rgba(255,150,0,.1);border:1px solid var(--orange);border-radius:8px;color:var(--orange);font-size:14px;font-weight:600;font-family:Arial,sans-serif}
+
+.footer{border-top:1px solid var(--border);padding:16px 24px;text-align:center}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .4s ease}
+@media(max-width:600px){.ba-grid{grid-template-columns:1fr}.ch-nav{gap:4px}.page-card{padding:18px 14px}}
+</style>
+</head>
+<body>
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="header"><div class="container"><div class="header-inner ui">
+<div><span style="color:var(--blue);font-weight:700;font-size:14px">similarweb</span><span style="color:var(--gray);font-size:13px;margin-left:8px">| MMX Classification Deep Dive</span></div>
+<span style="font-size:12px;color:var(--gray)" id="readCount"></span>
+</div></div></div>
+<div class="container" style="padding-top:20px;padding-bottom:20px">
+<!-- Search -->
+<div class="search-wrap ui">
+<span class="search-icon">🔍</span>
+<input class="search-input" id="searchInput" type="text" placeholder="Search any topic (e.g. 'gclid', 'paid search', 'direct traffic')..." oninput="doSearch(this.value)">
+<div class="search-results" id="searchResults"></div>
+</div>
+<!-- Glossary -->
+<div class="glossary ui" id="glossaryWrap">
+<div class="glossary-toggle" id="glossaryToggle" onclick="toggleGlossary()">
+<span>📖 Signal Glossary - Key Terms</span><span class="arrow">▾</span>
+</div>
+<div class="glossary-body" id="glossaryBody">
+<div class="g-item"><span class="g-term">Referrer URL (Referring Page)</span><div class="g-def">The web address of the page a user was on immediately before arriving at the current page. If you clicked a link on google.com, the referrer is google.com.</div></div>
+<div class="g-item"><span class="g-term">Landing Page</span><div class="g-def">The page a user arrives on. The full URL often contains parameters (after the ?) that carry tracking information.</div></div>
+<div class="g-item"><span class="g-term">UTM Parameters</span><div class="g-def">Tags added to URLs by marketing teams to identify traffic sources. Example: utm_source=google, utm_medium=cpc, utm_campaign=spring_sale. These appear after the ? in a URL.</div></div>
+<div class="g-item"><span class="g-term">gclid (Google Click ID)</span><div class="g-def">A unique code Google automatically adds to a URL when someone clicks a Google ad. Example: ?gclid=ABC123. It identifies the specific ad click.</div></div>
+<div class="g-item"><span class="g-term">msclkid (Microsoft Click ID)</span><div class="g-def">Same concept as gclid but for Microsoft/Bing ads.</div></div>
+<div class="g-item"><span class="g-term">fbclid (Facebook Click ID)</span><div class="g-def">Same concept but for Facebook/Instagram ads. Example: ?fbclid=IwAR2fCuc...</div></div>
+<div class="g-item"><span class="g-term">Ad-Hop Redirect</span><div class="g-def">When clicking an ad, the user first passes through an intermediate URL (like googleadservices.com) before reaching the final destination. This intermediate step is evidence of a paid click.</div></div>
+<div class="g-item"><span class="g-term">Session Context</span><div class="g-def">The sequence of pages/URLs in a user's browsing session. If the model sees an ad server one step before the landing page, it uses that as evidence even if the landing page has no tags.</div></div>
+<div class="g-item"><span class="g-term">In-App Webview</span><div class="g-def">A mini browser inside a mobile app (like Instagram or TikTok). When you click a link inside the app, it opens in this webview rather than your regular browser. These often do not pass referrer information.</div></div>
+<div class="g-item"><span class="g-term">Classification</span><div class="g-def">The process of examining all available signals on a visit and assigning it to one traffic channel (Paid Search, Organic, Social, etc.).</div></div>
+</div>
+</div>
+<div class="ch-nav ui" id="chNav"></div>
+<div id="chIntro" class="ch-intro ui"></div>
+<div class="dots ui" id="dots"></div>
+<div class="page-card fade-in" id="pageCard"></div>
+<div class="nav-row ui" id="navRow"></div>
+</div>
+<div class="footer ui">
+<span style="color:var(--blue);font-weight:700;font-size:13px">similarweb</span>
+<span style="color:var(--gray);font-size:12px;margin-left:12px">Internal Enablement - MMX Classification Deep Dive</span>
+</div>
+
+<script>
+// ========== DATA ==========
+const DATA=[
+// CHAPTER 1
+{id:1,title:"The Case We're Trying to Solve",icon:"🔍",dur:"5 min",
+intro:"Before we talk about what changed in MMX, we need to understand why traffic source classification is hard. This is the foundation of everything we tell clients.",
+pages:[
+{t:"Every Click Is a Case",
+html:`<p class="prose">Right now, somewhere on the internet, someone just clicked a link. Maybe it was a Google ad. Maybe it was a friend's Instagram story. Maybe they just typed a URL from memory.</p>
+<p class="prose">In that fraction of a second, a visit was created - and our job is to figure out where it came from. That sounds simple. It is not.</p>
+<div class="callout blue"><div class="c-icon">🎯</div><div><div class="c-title">What is traffic source classification?</div><div class="c-text">The act of looking at every single visit to a website and determining its origin. Did this person come from paid search? Organic search? Social? Email? Display? Or did they just type the URL directly?</div></div></div>
+<p class="prose">Getting this right is what makes our MMX data valuable. It is the difference between telling a client <em>"your competitor gets 2 million visits"</em> - which is interesting - and telling them <em>"your competitor shifted 15% of their traffic mix toward paid search this quarter"</em> - which is actionable.</p>
+<div class="callout"><div class="c-icon">💡</div><div><div class="c-title">The core insight</div><div class="c-text">Knowing a competitor's total traffic is interesting. Knowing <strong>how</strong> users got to their domain is actionable.</div></div></div>`,
+search:"classification traffic source visit origin paid search organic social email display actionable"},
+
+{t:"The Hostile Evidence Environment",
+html:`<p class="prose">Every visit arrives carrying clues - some clear, some faint, some completely absent. And you are working a scene where the evidence is actively being erased around you.</p>
+<div class="callout"><div class="c-icon">📱</div><div><div class="c-title">In-App Webviews</div><div class="c-text">When someone clicks a link inside a social media app, the app often opens a mini browser (called a webview) instead of the regular browser. That webview frequently does not pass a referrer URL. So a user clicks your client's link, arrives at the site, and there is no trace of where they came from.<br><br><strong>Important:</strong> Our data does not cover browsing inside apps, and does not cover the handoff from an app to a web browser. This is true for both the previous and the current methodology.</div></div></div>
+<div class="callout"><div class="c-icon">🔄</div><div><div class="c-title">Ad Platform Redirect Chains</div><div class="c-text">When a user clicks on an ad, the click often passes through intermediate URLs before reaching the final page. For example, clicking a Google ad first goes to googleadservices.com and then redirects to the destination. If those intermediate steps are not captured, the final landing page may show no evidence of the ad click.</div></div></div>
+<div class="callout"><div class="c-icon">📲</div><div><div class="c-title">Mobile Web</div><div class="c-text">Mobile web is now the primary way people browse. But mobile browsing sessions have more variation in what signals are available - the way apps hand off to browsers, the way different devices handle URLs, and the variety of browsing environments all contribute.</div></div></div>
+<p class="prose">So this is the environment. Every visit is a scene with partial evidence. Some was never there. Some got lost. And some is there but ambiguous.</p>`,
+search:"webview app mobile redirect evidence signals missing referrer hostile environment"},
+
+{t:"The Pie Problem",
+html:`<p class="prose">Now add one more constraint that makes everything harder.</p>
+<div class="callout blue"><div class="c-icon">🥧</div><div><div class="c-title">Traffic sources must add up to 100%</div><div class="c-text">Every visit gets assigned to one channel and only one channel. If you improve your ability to identify paid search clicks, those visits have to come from somewhere else in the pie. The entire distribution rebalances.</div></div></div>
+<p class="prose">This means improving the accuracy of any single channel forces the entire distribution to recalibrate. It is like a seesaw with multiple seats.</p>
+<p class="prose">This is what makes traffic source classification one of the hardest problems in web analytics. It is a detective problem - working partial evidence, in a challenging environment, where every answer you give changes every other answer.</p>
+<div class="takeaway"><div class="t-label">KEY TAKEAWAYS - CHAPTER 1</div>
+<div class="t-item">Classification assigns every visit to exactly one traffic channel</div>
+<div class="t-item">Evidence is often partial, missing, or ambiguous</div>
+<div class="t-item">Our data does not cover in-app browsing or app-to-browser handoffs</div>
+<div class="t-item">Channels are slices of a pie - improving one rebalances all others</div>
+</div>`,
+search:"pie 100% rebalance seesaw compositional channel slice"}
+]},
+
+// CHAPTER 2
+{id:2,title:"How We Built the Original Toolkit",icon:"🔧",dur:"5 min",
+intro:"The classification model we used was built around the strongest signal available and the panel data we had at the time. Understanding it is essential to understanding why the model evolved.",
+pages:[
+{t:"The Referrer URL - Our Primary Signal",
+html:`<p class="prose">Based on our panel coverage and the classification methods available at the time, the most reliable signal was the <strong>referrer URL</strong> - the answer to: <em>what was the last page this person was on before they arrived here?</em></p>
+<div class="callout"><div class="c-icon">🔍</div><div><div class="c-title">google.com in the referrer</div><div class="c-text">User searched on Google and clicked a result. This tells us: search traffic.</div></div></div>
+<div class="callout"><div class="c-icon">👥</div><div><div class="c-title">facebook.com in the referrer</div><div class="c-text">User clicked a link on Facebook. This tells us: social traffic.</div></div></div>
+<div class="callout"><div class="c-icon">📰</div><div><div class="c-title">news-site.com in the referrer</div><div class="c-text">User clicked a link on a news article. This tells us: referral traffic.</div></div></div>
+<div class="callout"><div class="c-icon">❌</div><div><div class="c-title">No referrer at all</div><div class="c-text">User typed the URL or used a bookmark. This tells us: direct traffic.</div></div></div>
+<p class="prose">This was the foundation: read the referring URL, match it against a dictionary of known domains, assign the visit to a channel. One signal, one decision. Fast, interpretable, and it scaled well.</p>`,
+search:"referrer URL referring page signal google facebook direct dictionary domains"},
+
+{t:"The Natural Boundary of One Signal",
+html:`<p class="prose">Every tool has a natural boundary - not a flaw, but a horizon defined by what it was designed to read.</p>
+<div class="callout"><div class="c-icon">🤔</div><div><div class="c-title">Paid or Organic Search?</div><div class="c-text">User clicks a Google result. Referrer says google.com. But was it a paid ad or an organic result? The referrer alone cannot tell - both produce the same referrer.</div></div></div>
+<div class="callout"><div class="c-icon">🤔</div><div><div class="c-title">Paid or Organic Social?</div><div class="c-text">User clicks a link on Facebook. Referrer says facebook.com. But was it a paid ad in their feed or an organic post shared by a friend? The referrer alone cannot distinguish them.</div></div></div>
+<div class="callout"><div class="c-icon">🤔</div><div><div class="c-title">Actually Direct, or Signal Lost?</div><div class="c-text">Some visits had no referrer - not because the person typed the URL, but because the signal got dropped. These ended up in Direct by default.</div></div></div>
+<p class="prose">None of this meant the approach was wrong. But the web was evolving, and new types of signals were becoming available. The question became: could we build a model that reads all of them?</p>
+<div class="takeaway"><div class="t-label">KEY TAKEAWAYS - CHAPTER 2</div>
+<div class="t-item">Our original model classified visits based on the referrer URL</div>
+<div class="t-item">This was the right approach for our panel data and methods at the time</div>
+<div class="t-item">It could not distinguish paid vs. organic within the same platform</div>
+<div class="t-item">Visits where the signal was lost defaulted to Direct</div>
+</div>`,
+search:"boundary paid organic cannot distinguish direct default signal lost"}
+]},
+
+// CHAPTER 3
+{id:3,title:"Why the World Changed - and What We Built",icon:"🌐",dur:"7 min",
+intro:"Several things happened at the same time. The web evolved, our panel grew, and we made deliberate decisions about what signals to read. The result is a fundamentally different classification model.",
+pages:[
+{t:"What Changed - and Why",
+html:`<p class="prose">The evolution was driven by a combination of factors working together:</p>
+<div class="callout"><div class="c-icon">🏷️</div><div><div class="c-title">The web developed new signal types</div><div class="c-text">Ad platforms introduced <strong>click identifiers</strong> - unique codes added to the landing page URL when someone clicks an ad. Google's is called <strong>gclid</strong>, Microsoft's is <strong>msclkid</strong>, Facebook's is <strong>fbclid</strong>. These are part of the URL itself, so they remain visible even when the referrer is missing.<br><br><strong>Example:</strong> When a user clicks a Google ad, the landing URL looks like: <em>brand.com/shoes?gclid=ABC123</em>. That ?gclid=ABC123 tells us this was a Google ad click, regardless of the referrer.<br><br>Similarly, <strong>UTM parameters</strong> (like utm_source=google and utm_medium=cpc) became widely used by marketing teams to tag their campaigns.</div></div></div>
+<div class="callout"><div class="c-icon">📱</div><div><div class="c-title">Our mobile web panel grew significantly</div><div class="c-text">The new MMX algorithm harnesses a much larger and more representative mobile web panel. Instead of relying primarily on desktop traffic, we now have real mobile web user data - which allows us to better identify mobile web trends, classify mobile domains, and detect mobile URL parameters.</div></div></div>
+<div class="callout"><div class="c-icon">⚙️</div><div><div class="c-title">We expanded what signals the model reads</div><div class="c-text">We expanded the classification model to look for URL parameters, redirect patterns, click identifiers, and session context - not just the referring page. And we introduced AI to continuously scan URL structures and surface new patterns.</div></div></div>
+<p class="prose">These factors reinforced each other. A richer panel gave us more data to work with. More signal types gave us more evidence per visit. Better AI-powered methods let us read that evidence more accurately. And new traffic sources - like GenAI - meant we needed new classification categories altogether.</p>`,
+search:"gclid msclkid fbclid utm parameters mobile web panel AI signal types click identifiers"},
+
+{t:"The Multi-Method Approach",
+html:`<p class="prose">Instead of reading one signal and making a decision, the new model reads <strong>every available signal on every visit</strong> and combines them. We call this the <strong>multi-method approach</strong> - a clue ladder where the model climbs through layers of evidence.</p>
+<div class="callout"><div class="c-icon">🔗</div><div><div class="c-title">Referrer and Redirect Evidence</div><div class="c-text">Still reads the referrer URL, but now also tracks redirect chains. When a user clicks a Google ad, the click first goes to googleadservices.com, then to the landing page. The model sees that intermediate step - the strongest single proof of a paid click.</div></div></div>
+<div class="callout"><div class="c-icon">🏷️</div><div><div class="c-title">Landing URL Parameters</div><div class="c-text">The full destination URL, including UTM tags and click IDs. <strong>Example:</strong> <em>brand.com/sale?utm_source=google&utm_medium=cpc&gclid=ABC123</em> tells the model: paid Google ad click.</div></div></div>
+<div class="callout"><div class="c-icon">🆔</div><div><div class="c-title">Platform Click Identifiers</div><div class="c-text">Unique codes ad platforms add to URLs automatically: gclid (Google), msclkid (Bing), fbclid (Facebook). These are part of the landing URL itself, so they remain visible even when the referrer is missing. <strong>Example:</strong> <em>?fbclid=IwAR2fCuc...</em> tells the model this came from a Facebook ad.</div></div></div>
+<div class="callout"><div class="c-icon">🕐</div><div><div class="c-title">Session Context</div><div class="c-text"><strong>Example:</strong> A user clicks a banner ad on a news site. Step 1: the click passes through ads.doubleclick.net (an ad server). Step 2: the user lands on brand.com/sale with a clean URL. The model saw doubleclick.net in step 1, so it classifies this as a display ad - even though the landing page has no evidence.</div></div></div>
+<div class="callout"><div class="c-icon">🤖</div><div><div class="c-title">AI-Powered Classification</div><div class="c-text">Three stages: (1) Ingesting raw data - referring pages and URL parameters. (2) AI Classification - using AI models to classify domains and infer URL parameters, building rules for channel assignment. (3) Reinforcement Learning - continuously optimizing through a feedback loop of correct and incorrect classifications.</div></div></div>
+<p class="prose"><strong>Only when every signal is genuinely absent does a visit get classified as Direct.</strong></p>`,
+search:"multi-method clue ladder redirect session context AI reinforcement learning classification"},
+
+{t:"Real Examples: How the Model Reads URLs",
+html:`<p class="prose">Here are real examples showing how combining the sending page and landing page gives the model richer evidence:</p>
+<div class="url-ex"><div class="ue-label">Example 1: Email Traffic</div>
+<div class="ue-url"><strong>Sending page:</strong> <span class="highlight">mail</span>.aol.com/d/list/referrer=newMail&folders=1...<br>
+<strong>Landing page:</strong> nytimes.com/...?<span class="highlight">campaign_id</span>=44&emc=edit_ur_20240623...</div>
+<div style="font-size:13px;color:var(--text);margin-top:8px">The "campaign_id=" parameter in the landing page tells us this is not direct and is likely from a campaign. The "mail." subdomain in the sending page identifies an email client.</div>
+<div class="ue-result">Channel = Email</div></div>
+<div class="url-ex"><div class="ue-label">Example 2: Social Paid</div>
+<div class="ue-url"><strong>Sending page:</strong> facebook.com<br>
+<strong>Landing page:</strong> nytimes.com/games/connections?<span class="highlight">fbclid</span>=IwAR2fCuc-UULadeqbm8Z53fTPR...</div>
+<div style="font-size:13px;color:var(--text);margin-top:8px">The "fbclid=" parameter tells us this is a paid click from Facebook. The facebook.com sending page confirms social origin.</div>
+<div class="ue-result">Channel = Social Paid</div></div>`,
+search:"URL example email mail aol nytimes campaign fbclid facebook social paid sending landing"},
+
+{t:"Four Scenarios - Click to Explore",
+html:`<p class="prose">Click each scenario to see the evidence and classification:</p>
+<div class="scenario" onclick="this.classList.toggle('open')"><div class="s-header"><div><div class="s-label">Scenario 1: Full Evidence</div><div class="s-signals">Ad redirect (googleadservices.com) + gclid + utm_medium=cpc</div></div><div class="s-result">Paid Search</div></div><div class="s-detail">Three independent signals all pointing to paid search. The ad redirect alone would be enough, and the tags confirm it.</div></div>
+<div class="scenario" onclick="this.classList.toggle('open')"><div class="s-header"><div><div class="s-label">Scenario 2: Missing Referrer</div><div class="s-signals">No referrer + landing URL has utm_source=google & utm_medium=cpc</div></div><div class="s-result">Paid Search</div></div><div class="s-detail">The referrer is gone. But the landing page tags are clear evidence. The model does not need the referrer when the URL tells the story.</div></div>
+<div class="scenario" onclick="this.classList.toggle('open')"><div class="s-header"><div><div class="s-label">Scenario 3: Clean Landing Page</div><div class="s-signals">No referrer + no URL params + doubleclick.net seen one step before</div></div><div class="s-result">Display Ad</div></div><div class="s-detail">The landing page has no evidence. But the model saw the ad server (doubleclick.net) in the previous step. Example: user clicked a banner on a news site, click went through doubleclick.net, then landed on brand.com/sale with a clean URL.</div></div>
+<div class="scenario" onclick="this.classList.toggle('open')"><div class="s-header"><div><div class="s-label">Scenario 4: Organic Search</div><div class="s-signals">Referrer = google.com/search + no paid tags + no click IDs + no ad redirect</div></div><div class="s-result">Organic Search</div></div><div class="s-detail">Referrer says search. No paid markers anywhere. Absence of paid evidence + search referrer = organic. Gets more precise as paid detection improves.</div></div>
+<div class="takeaway"><div class="t-label">KEY TAKEAWAYS - CHAPTER 3</div>
+<div class="t-item">New signal types (click IDs, UTMs) + larger MW panel + AI classification = multi-method approach</div>
+<div class="t-item">The model now reads referrer + URL params + click IDs + session context + AI patterns</div>
+<div class="t-item">Signals reinforce each other - if one is missing, others compensate</div>
+<div class="t-item">Direct is assigned only when ALL signals are genuinely absent</div>
+</div>`,
+search:"scenario evidence paid search organic display full missing clean"}
+]},
+
+// CHAPTER 4
+{id:4,title:"Channel by Channel: Before & After",icon:"📂",dur:"12 min",
+intro:"The new ingredients allow the algorithm to better classify paid channels, detect mail traffic, classify affiliates, split social into organic and paid, and provide a more accurate Direct figure.",
+pages:[
+{t:"Paid Search",badge:"BIGGEST IMPROVEMENT",
+html:`<div class="ba-grid"><div class="ba-col before"><div class="ba-header">BEFORE</div><div class="ba-item">Relied on UTM tags on landing page</div><div class="ba-item">If utm_medium=cpc present = paid</div><div class="ba-item">If tags missing = hard to identify</div></div>
+<div class="ba-col after"><div class="ba-header">NOW</div><div class="ba-item">Ad redirect (googleadservices.com) is first-class evidence on its own</div><div class="ba-item">Click IDs (gclid, msclkid) confirm paid even without UTMs</div><div class="ba-item">Corroborating signals combine when primary evidence is missing</div></div></div>
+<p class="prose">The result: the model identifies paid clicks that previously went undetected because their tags were stripped or their redirects were not captured.</p>`,
+search:"paid search gclid msclkid utm cpc ad redirect googleadservices multi-method"},
+
+{t:"Organic Search",
+html:`<p class="prose">Organic is defined by what is <strong>not</strong> there: the referrer indicates a search engine AND there are no paid markers present.</p>
+<p class="prose">The core definition has not changed. But when paid search identification improves, organic becomes more precise. Visits that were previously hard to distinguish now get correctly sorted - some turn out to be paid. When those are correctly identified, organic becomes a more precise representation of truly unpaid search traffic.</p>`,
+search:"organic search unpaid referrer paid markers absence"},
+
+{t:"Social - Now Paid & Organic",badge:"SPLIT INTO 2",
+html:`<div class="callout"><div class="c-icon">💰</div><div><div class="c-title">Social Paid</div><div class="c-text">Click IDs: fbclid (Facebook/Instagram), twclid (Twitter). UTM tags: utm_medium=cpc or paid-social.<br><strong>Example:</strong> Landing URL <em>nytimes.com/games?fbclid=IwAR2fCuc...</em> with sending page <em>facebook.com</em> = Social Paid.</div></div></div>
+<div class="callout"><div class="c-icon">🌱</div><div><div class="c-title">Social Organic</div><div class="c-text">Referrer is a known social domain (facebook.com, linkedin.com, instagram.com) with no paid markers present.</div></div></div>
+<div class="callout"><div class="c-icon">⚠️</div><div><div class="c-title">Coverage Note</div><div class="c-text">Our data does not cover in-app browsing or app-to-browser handoffs. When a social app link opens a browser without a referrer, that traffic may appear as Direct. This applies to both the previous and current methodology.</div></div></div>`,
+search:"social paid organic fbclid twclid facebook instagram split coverage webview"},
+
+{t:"Display Advertising",
+html:`<p class="prose">The model uses three signal layers:</p>
+<div class="callout"><div class="c-icon">1️⃣</div><div><div class="c-title">Ad server redirect</div><div class="c-text">Click routes through a known ad server (doubleclick.net, outbrain.com, taboola.com) before reaching destination. Primary evidence.</div></div></div>
+<div class="callout"><div class="c-icon">2️⃣</div><div><div class="c-title">URL parameters</div><div class="c-text">utm_medium=display, utm_medium=banner, or utm_medium=programmatic on the landing page.</div></div></div>
+<div class="callout"><div class="c-icon">3️⃣</div><div><div class="c-title">Session context</div><div class="c-text">When the landing URL is stripped of tags, the model checks what happened in previous steps. If the user came from a site known for display ads, that provides corroboration.</div></div></div>`,
+search:"display advertising banner programmatic doubleclick outbrain taboola ad server"},
+
+{t:"Referral & Affiliate",badge:"AFFILIATE = NEW",
+html:`<p class="prose"><strong>Referral</strong> is organic - a blog or news article linking to your site. <strong>Affiliate</strong> is commercial - a partner earning commission for driving traffic.</p>
+<div class="ba-grid"><div class="ba-col before"><div class="ba-header">BEFORE</div><div class="ba-item">Affiliates identified via redirect domains only</div><div class="ba-item">Most affiliates classified as regular referral</div></div>
+<div class="ba-col after"><div class="ba-header">NOW</div><div class="ba-item">URL parameter patterns detected (affid, ref=)</div><div class="ba-item">Affiliates caught without recognized redirect domain</div><div class="ba-item">Affiliates = standalone channel</div></div></div>`,
+search:"referral affiliate affid partner commission redirect domain standalone channel"},
+
+{t:"Email",
+html:`<p class="prose">Identified through mail provider domains in the referrer (mail.google.com, mail.yahoo.com) and UTM parameters (utm_medium=email, utm_source=newsletter).</p>
+<div class="url-ex"><div class="ue-label">Example from our data</div>
+<div class="ue-url"><strong>Sending page:</strong> <span class="highlight">mail</span>.aol.com/d/list/referrer=newMail...<br><strong>Landing page:</strong> nytimes.com/...?<span class="highlight">campaign_id</span>=44&emc=edit_ur...</div>
+<div class="ue-result">Channel = Email</div></div>
+<p class="prose">The new methodology better identifies email traffic. Visits that lacked a recognizable referrer and did not carry email UTM tags were previously classified as Direct. The improved classification catches more of these through expanded parameter patterns and provider matching.</p>`,
+search:"email mail provider utm newsletter campaign direct classification"},
+
+{t:"Direct - The Last Classification Standing",
+html:`<p class="prose">Direct is classified by the <strong>absence of all other signals</strong>. The system tries every other channel first. Only when no evidence is found does a visit get classified as Direct.</p>
+<div class="callout blue"><div class="c-icon">📊</div><div><div class="c-title">What happens to Direct under the new methodology?</div><div class="c-text">The Direct figure may change in any direction - it may decrease for some sites, stay the same for others, or even increase. A more accurate Direct figure is not necessarily lower - it represents a more precise picture of what is truly unattributed.<br><br><strong>Each site will see a different traffic split</strong> - sometimes similar to before, sometimes quite different. The new split reflects the model reading more signals and producing a more accurate distribution for that specific site.</div></div></div>`,
+search:"direct unattributed last resort absence signals accurate split"},
+
+{t:"Generative AI",badge:"NEW",
+html:`<p class="prose">A brand new channel measuring visits from standalone AI chatbot platforms - ChatGPT, Claude, Gemini, Perplexity, etc.</p>
+<div class="callout blue"><div class="c-icon">🤖</div><div><div class="c-title">Classification rule</div><div class="c-text"><strong>1.</strong> Referrer domain is a recognized chatbot (chat.openai.com, perplexity.ai, claude.ai, etc.)<br><strong>2.</strong> No ad/affiliate network hop between the chatbot and the destination site.</div></div></div>
+<p class="prose">For most sites, GenAI traffic represents a small portion of total traffic. But it tracks an emerging source that is strategically significant. Because this is new, there is no historical comparison - it shows a non-zero figure where previously there was no measurement.</p>
+<div class="takeaway"><div class="t-label">KEY TAKEAWAYS - CHAPTER 4</div>
+<div class="t-item">Paid Search: biggest improvement - multi-method approach (ad redirect + tags + click IDs)</div>
+<div class="t-item">Organic: more precise as paid detection improves</div>
+<div class="t-item">Social: now split into Paid and Organic</div>
+<div class="t-item">Affiliates: new standalone channel (parameter pattern recognition)</div>
+<div class="t-item">Email: better identified through expanded parameter matching</div>
+<div class="t-item">Direct: may change in any direction - represents a more accurate split</div>
+<div class="t-item">GenAI: brand new channel for chatbot-originated traffic</div>
+</div>`,
+search:"generative AI GenAI chatbot ChatGPT Claude Gemini Perplexity new channel"}
+]},
+
+// CHAPTER 5
+{id:5,title:"The Client Conversation",icon:"💬",dur:"6 min",
+intro:"You understand the model. Now you need to explain it confidently. Here are the questions your clients will ask, and exactly how to answer them.",
+pages:[
+{t:'"Why is channel X so different?"',isQ:1,
+html:`<div class="client-block"><div class="client-says">CLIENT ASKS:</div><div style="color:var(--white);font-size:15px;margin-bottom:12px">"The numbers for paid search / organic / direct look completely different. What happened?"</div>
+<div class="client-says" style="color:var(--blue)">YOU SAY:</div>
+<div class="you-say">"The classification methodology has evolved to read a wider set of signals on each visit. Previously, it relied primarily on the referring URL. The new model also reads URL parameters, click identifiers, ad redirects, and session context. When a channel's share changes, it reflects this broader identification - the methodology is now reading signals it was not reading before."</div></div>
+<p class="prose"><strong>Then get specific.</strong> If they ask about paid search, explain the multi-method approach. If they ask about Direct changing, explain the model now reads more signals before defaulting to Direct. Always connect the <strong>what</strong> (the number changed) to the <strong>how</strong> (here is the specific signal we now read).</p>`,
+search:"why different channel changed numbers client question"},
+
+{t:'"Where did the traffic go?"',isQ:1,
+html:`<div class="client-block"><div class="client-says">CLIENT ASKS:</div><div style="color:var(--white);font-size:15px;margin-bottom:12px">"If my organic share decreased, where did those visits move?"</div>
+<div class="client-says" style="color:var(--blue)">YOU SAY:</div>
+<div class="you-say">"Each channel's identification has improved independently. The new methodology is better at identifying visits that belong in each channel. It is not that traffic moved - it is that the classification is now reading signals it was not reading before."</div></div>
+<div class="callout"><div class="c-icon">⚠️</div><div><div class="c-title">Critical: NO migration claims</div><div class="c-text">Do not say visits moved from Channel A to Channel B. The methodology does not track individual visit reassignment. Each channel reflects a more precise count - that is not a migration, it is better measurement.</div></div></div>
+<div class="callout blue"><div class="c-icon">💡</div><div><div class="c-title">Helpful framing</div><div class="c-text">Think of it like recalibrating a scale. You are not moving weight from one side to the other. You are getting a more accurate reading of what was always there.</div></div></div>`,
+search:"where traffic go migration claims moved channel recalibrate scale"},
+
+{t:'"Can I trust the new numbers?"',isQ:1,
+html:`<div class="client-block"><div class="client-says">CLIENT ASKS:</div><div style="color:var(--white);font-size:15px;margin-bottom:12px">"These numbers don't match what I had before. Can I trust them?"</div>
+<div class="client-says" style="color:var(--blue)">YOU SAY:</div>
+<div class="you-say">"Across five key channels - paid search, display ads, referral, direct, and email - the new methodology shows statistically higher accuracy when validated against Google Analytics as our source of truth. On desktop, the new MMX is closer to GA on almost every channel. On mobile web, the improvement is even more significant. And on organic search, display, and social - our new MMX is closer to GA than SemRush."</div></div>
+<p class="prose">This is measured improvement, not a marketing claim. Then offer to look at their specific data together.</p>`,
+search:"trust numbers accuracy GA Google Analytics validation SemRush closer"},
+
+{t:'"But how can data be better overall but look different for my site?"',isQ:1,
+html:`<div class="client-block"><div class="client-says">CLIENT ASKS:</div><div style="color:var(--white);font-size:15px;margin-bottom:12px">"If the data improved, why does my site's split look so different?"</div>
+<div class="client-says" style="color:var(--blue)">YOU SAY:</div>
+<div class="you-say">"We validate accuracy by comparing our estimates to Google Analytics data across many sites, countries, and channels. Statistically, across these cohorts, the new data is closer to GA. But 'closer on average across cohorts' does not mean every individual site sees the same change. Some sites will see a similar split. Others will see a quite different distribution. This is expected - because each site has a unique traffic mix, and the classification reads signals differently for each one."</div></div>
+<div class="callout blue"><div class="c-icon">📊</div><div><div class="c-title">The key point</div><div class="c-text">The overall methodology is demonstrably more accurate when measured statistically. Each individual site's data reflects a more precise classification of that site's specific traffic. The direction and magnitude of change varies by site, because the traffic profile varies by site.</div></div></div>
+<p class="prose">If a client wants to understand their specific data, offer to look at it together.</p>`,
+search:"individual site cohort different split better overall methodology accurate"},
+
+{t:'"Was my previous analysis wrong?"',isQ:1,
+html:`<div class="client-block"><div class="client-says">CLIENT ASKS:</div><div style="color:var(--white);font-size:15px;margin-bottom:12px">"Does this mean everything I reported last quarter was wrong?"</div>
+<div class="client-says" style="color:var(--blue)">YOU SAY:</div>
+<div class="you-say">"The prior methodology produced the most accurate results possible given the data and methods available at the time. The directional conclusions and competitive comparisons built on that data retain their value. A competitor investing in paid search was still investing. A trend showing social growth was still real growth. The new data does not invalidate past analysis - it provides a more precise baseline going forward."</div></div>
+<p class="prose">Frame it as a one-time recalibration that improves everything that follows. This is not a disruption - it is an upgrade.</p>`,
+search:"previous analysis wrong invalidate prior methodology recalibration upgrade"},
+
+{t:"Your AI Backup: Boiman on MMX Agent",
+html:`<div class="callout blue"><div class="c-icon">🤖</div><div><div class="c-title">Boiman on MMX Agent</div><div class="c-text">An AI-powered tool built for this use case. Provide it with a client's old and new data, and it generates a grounded, client-ready explanation of why numbers differ.<br><br>Same principles as this course: no migration claims, no negative framing, specific channel-level explanations tied to what improved in identification.</div></div></div>
+<p class="prose">Your AI backup for the client conversation - it does the analytical heavy lifting so you can focus on the relationship.</p>
+<div class="takeaway"><div class="t-label">KEY TAKEAWAYS - CHAPTER 5</div>
+<div class="t-item">Connect the WHAT (number changed) to the HOW (specific signal now read)</div>
+<div class="t-item">Never make migration claims - each channel improved independently</div>
+<div class="t-item">Ground trust in GA validation data, not reassurance</div>
+<div class="t-item">"Better overall" and "different for your site" are both true - explain why</div>
+<div class="t-item">Prior analysis retains directional value - frame new data as a one-time recalibration</div>
+</div>`,
+search:"Boiman MMX Agent AI tool client conversation backup"}
+]}
+];
+
+// Quick Reference data
+const QR_DATA=[
+{ch:"Paid Search",signals:"Ad redirect (googleadservices.com) + UTM tags (utm_medium=cpc) + Click IDs (gclid, msclkid)",note:"Biggest improvement. Multi-method approach."},
+{ch:"Organic Search",signals:"Search referrer (google.com/search) + absence of all paid markers",note:"Gets more precise as paid detection improves."},
+{ch:"Social Paid",signals:"Click IDs (fbclid, twclid) + paid UTM tags (utm_medium=cpc/paid-social)",note:"New split from single Social channel.",isNew:1},
+{ch:"Social Organic",signals:"Social referrer (facebook.com, linkedin.com) + no paid markers",note:"New split from single Social channel.",isNew:1},
+{ch:"Display Ads",signals:"Ad server redirect (doubleclick.net, outbrain.com) + display UTMs + session context",note:"Better classification of paid referral traffic."},
+{ch:"Referral",signals:"Referrer domain that is not search/social/ad network",note:"Now separated from affiliates."},
+{ch:"Affiliates",signals:"Affiliate IDs (?affid=, ?ref=) + known affiliate network domains",note:"New standalone channel.",isNew:1},
+{ch:"Email",signals:"Mail provider domain in referrer (mail.google.com) + email UTMs (utm_medium=email)",note:"Better detected through expanded parameter matching."},
+{ch:"Direct",signals:"Absence of ALL other signals. Last classification standing.",note:"May change in any direction. More accurate, not necessarily lower."},
+{ch:"Generative AI",signals:"Chatbot referrer (chat.openai.com, perplexity.ai) + no ad/affiliate hop",note:"Brand new channel. Small portion of traffic. Strategically significant.",isNew:1}
+];
+
+// ========== STATE ==========
+let chIdx=0,pgIdx=0,readPages={},showRef=false;
+const totalPages=DATA.reduce((s,c)=>s+c.pages.length,0);
+
+// ========== SEARCH ==========
+function doSearch(q){
+const el=document.getElementById('searchResults');
+if(!q||q.length<2){el.classList.remove('show');return}
+q=q.toLowerCase();
+let results=[];
+DATA.forEach((ch,ci)=>{
+ch.pages.forEach((pg,pi)=>{
+const haystack=(pg.t+' '+pg.search+' '+(pg.html||'')).toLowerCase().replace(/<[^>]*>/g,' ');
+if(haystack.includes(q)){
+const idx=haystack.indexOf(q);
+const snippet=haystack.substring(Math.max(0,idx-40),idx+60).replace(/\s+/g,' ');
+results.push({ci,pi,ch:ch.title,t:pg.t,snippet:'...'+snippet+'...'});
+}
+});
+});
+// Also search glossary
+const glossaryTerms=['referrer url','landing page','utm parameters','gclid','msclkid','fbclid','ad-hop redirect','session context','webview','classification'];
+glossaryTerms.forEach(term=>{
+if(term.includes(q)){results.unshift({ci:-1,pi:-1,ch:'GLOSSARY',t:term,snippet:'See Signal Glossary at the top of the page'});}
+});
+if(!results.length){el.classList.remove('show');return}
+el.innerHTML=results.slice(0,6).map(r=>`<div class="sr-item" onclick="${r.ci>=0?`goTo(${r.ci},${r.pi})`:'toggleGlossary()'}">
+<div class="sr-ch">${r.ch}</div><div class="sr-title">${r.t}</div><div class="sr-match">${r.snippet}</div></div>`).join('');
+el.classList.add('show');
+}
+
+function goTo(ci,pi){chIdx=ci;pgIdx=pi;showRef=false;render();
+document.getElementById('searchInput').value='';
+document.getElementById('searchResults').classList.remove('show');}
+
+// ========== GLOSSARY ==========
+function toggleGlossary(){
+const t=document.getElementById('glossaryToggle'),b=document.getElementById('glossaryBody');
+t.classList.toggle('open');b.classList.toggle('show');
+}
+
+// ========== RENDER ==========
+function render(){
+const readCount=Object.keys(readPages).length;
+document.getElementById('progressFill').style.width=(readCount/totalPages*100)+'%';
+document.getElementById('readCount').textContent=readCount+'/'+totalPages+' read';
+
+// Nav
+let nav='';
+DATA.forEach((c,i)=>{
+const active=!showRef&&i===chIdx?'active':'';
+const chRead=c.pages.filter((_,pi)=>readPages[i+'-'+pi]).length;
+nav+=`<button class="ch-btn ui ${active}" onclick="chIdx=${i};pgIdx=0;showRef=false;render()">
+<div class="icon">${c.icon}</div><div class="label">CH ${c.id}</div><div class="name">${c.title}</div>
+<div class="ch-progress"><div class="ch-progress-fill" style="width:${(chRead/c.pages.length)*100}%"></div></div></button>`;
+});
+nav+=`<button class="ref-btn ui ${showRef?'active':''}" onclick="showRef=true;render()">
+<div class="icon">📋</div><div class="label" style="color:var(--orange)">REF</div><div class="name" style="color:${showRef?'var(--orange)':'var(--gray)'}">Quick Ref</div></button>`;
+document.getElementById('chNav').innerHTML=nav;
+
+if(showRef){renderQuickRef();return}
+
+const ch=DATA[chIdx],pg=ch.pages[pgIdx],key=chIdx+'-'+pgIdx;
+setTimeout(()=>{if(!readPages[key]){readPages[key]=true;render()}},3000);
+
+document.getElementById('chIntro').innerHTML=`<div class="label">CHAPTER ${ch.id} · ${ch.dur}</div><div class="title">${ch.title}</div><div class="desc">${ch.intro}</div>`;
+document.getElementById('chIntro').style.display='';
+
+let dots='';
+ch.pages.forEach((p,i)=>{
+const color=i===pgIdx?'var(--blue)':readPages[chIdx+'-'+i]?'var(--orange)':'var(--border)';
+dots+=`<button class="dot ${i===pgIdx?'active':''}" style="background:${color}" onclick="pgIdx=${i};render()"></button>`;
+});
+document.getElementById('dots').innerHTML=dots;
+document.getElementById('dots').style.display='';
+
+let html=`<div class="fade-in"><div class="page-title">${pg.isQ?'<span class="q">Client asks: </span>':''}${pg.t}${pg.badge?'<span class="badge">'+pg.badge+'</span>':''}</div>
+<div class="page-meta">Section ${pgIdx+1} of ${ch.pages.length}</div>${pg.html}</div>`;
+document.getElementById('pageCard').innerHTML=html;
+
+const isFirst=chIdx===0&&pgIdx===0,isLast=chIdx===DATA.length-1&&pgIdx===ch.pages.length-1;
+let navR='';
+if(!isFirst)navR+=`<button class="nav-btn nav-prev ui" onclick="goPrev()">← Back</button>`;else navR+='<div></div>';
+if(!isLast)navR+=`<button class="nav-btn nav-next ui" onclick="goNext()">Continue →</button>`;
+else navR+=`<div class="nav-end ui">🔍 You are the detective. Now go work the case.</div>`;
+document.getElementById('navRow').innerHTML=navR;
+window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function renderQuickRef(){
+document.getElementById('chIntro').innerHTML=`<div class="label">QUICK REFERENCE</div><div class="title">Channel Classification Cheat Sheet</div><div class="desc">Pull this up during client calls. Each channel with its key signals and what changed.</div>`;
+document.getElementById('dots').innerHTML='';
+let html='<div class="fade-in">';
+QR_DATA.forEach(r=>{
+html+=`<div class="qr-card"><div class="qr-channel">${r.ch}${r.isNew?'<span class="qr-new">NEW</span>':''}</div>
+<div class="qr-signals"><strong>Key signals:</strong> ${r.signals}<br><strong>Note:</strong> ${r.note}</div></div>`;
+});
+html+=`<div class="takeaway" style="margin-top:20px"><div class="t-label">REMEMBER</div>
+<div class="t-item">Never make migration claims (traffic moved from A to B)</div>
+<div class="t-item">Each site's split may change differently - this is expected</div>
+<div class="t-item">Prior analysis retains directional value</div>
+<div class="t-item">Offer to look at the client's specific data together</div>
+<div class="t-item">Use the Boiman on MMX Agent for data-specific explanations</div>
+</div></div>`;
+document.getElementById('pageCard').innerHTML=html;
+document.getElementById('navRow').innerHTML='';
+}
+
+function goNext(){const ch=DATA[chIdx];if(pgIdx<ch.pages.length-1)pgIdx++;else if(chIdx<DATA.length-1){chIdx++;pgIdx=0}render()}
+function goPrev(){if(pgIdx>0)pgIdx--;else if(chIdx>0){chIdx--;pgIdx=DATA[chIdx].pages.length-1}render()}
+
+render();
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))document.getElementById('searchResults').classList.remove('show')});
+</script>
+</body>
+</html>
